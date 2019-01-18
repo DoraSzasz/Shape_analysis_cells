@@ -54,9 +54,9 @@ int main(int argc, char* argv[]) {
 	
 	typedef itk::Image< unsigned char, Dimension > OutputImageType;
 	typedef itk::ConnectedComponentImageFilter< ImageType, CCImageType > ConnectedComponentImageFilterType;
-	typedef itk::RelabelComponentImageFilter<CCImageType, CCImageType> RelabelFilterType;
 	typedef	itk::LabelImageToShapeLabelMapFilter< CCImageType, LabelMapType> I2LType;	
-
+	typedef itk::RelabelComponentImageFilter<CCImageType, CCImageType> RelabelFilterType;
+	
 	ConnectedComponentImageFilterType::Pointer connected = ConnectedComponentImageFilterType::New ();
 	connected->SetInput(image);
 	connected->SetFullyConnected(false);
@@ -65,37 +65,35 @@ int main(int argc, char* argv[]) {
 	
 	RelabelFilterType::Pointer relabelFilter = RelabelFilterType::New();
 	relabelFilter->SetInput(connected->GetOutput());
-	relabelFilter->SetMinimumObjectSize(10);
 	relabelFilter->Update();
 
 
 	typedef std::vector< itk::SizeValueType > SizesInPixelsType ;
-	const SizesInPixelsType & sizesInPixels = relabelFilter->GetSizeOfObjectsInPixels();
-
-	SizesInPixelsType::const_iterator sizeItr = sizesInPixels.begin();
-	SizesInPixelsType::const_iterator sizeEnd = sizesInPixels.end();
-	std::cout << "Number of pixels per class " << std::endl;
-	unsigned int kclass = 0;
-	while (sizeItr != sizeEnd){
-		std::cout << "Class " << kclass << " = " << *sizeItr << std::endl;
-		++kclass;
-		++sizeItr;
-	}
+  const SizesInPixelsType & sizesInPixels = relabelFilter->GetSizeOfObjectsInPixels();
+  SizesInPixelsType::const_iterator sizeItr = sizesInPixels.begin();
+  SizesInPixelsType::const_iterator sizeEnd = sizesInPixels.end();
+  std::cout << "Number of pixels per class " << std::endl;
+  unsigned int kclass = 0;
+  while (sizeItr != sizeEnd)
+    {
+    std::cout << "Class " << kclass << " = " << *sizeItr << std::endl;
+    ++kclass;
+    ++sizeItr;
+    }
 
 	I2LType::Pointer i2l = I2LType::New();
-	i2l->SetInput( relabelFilter->GetOutput() );
+	i2l->SetInput( connected->GetOutput() );
 	i2l->Update();
 
 
 	LabelMapType *labelMap = i2l->GetOutput();
   // Retrieve all attributes
-	std::ofstream outfile ("cell_attributes_relabel.csv");
+	std::ofstream outfile ("cell_attributes.csv");
 	std::vector<ParameterPixelType> parameterTable;
 	parameterTable.resize(labelMap->GetNumberOfLabelObjects());
   for (unsigned int n = 0; n < labelMap->GetNumberOfLabelObjects(); ++n)
     {
     ShapeLabelObjectType *labelObject = labelMap->GetNthLabelObject(n);
-	std::cout << "Label " << labelObject->GetLabel() << std::endl;
     outfile << itk::NumericTraits<LabelMapType::LabelType>::PrintType(labelObject->GetLabel()) << ",";
     outfile << labelObject->GetNumberOfPixels() << ",";
     outfile << labelObject->GetPhysicalSize() << ",";
@@ -115,7 +113,7 @@ int main(int argc, char* argv[]) {
     outfile << labelObject->GetPrincipalAxes()[2][1] << ",";
     outfile << labelObject->GetPrincipalAxes()[2][2] << ",";
     outfile << labelObject->GetElongation() << ",";
-    outfile << labelObject->GetRoundness() << "," << std::endl;
+    outfile << labelObject->GetRoundness() << ",";
 	parameterTable[n] = labelObject->GetNumberOfPixels();
     }
 
@@ -137,7 +135,7 @@ int main(int argc, char* argv[]) {
 	while( !inputIt.IsAtEnd() )
 		{
 		float value= parameterTable[ inputIt.Get()];
-		outputIt.Set(value); 
+		outputIt.Set(value==1? 255: 0); 
 		++inputIt;
 		++outputIt;
 		}
