@@ -1,4 +1,5 @@
 #include "itkImage.h"
+#include "itkImageRegionIterator.h"
 #include "itkImageFileReader.h"
 #include "itkConnectedComponentImageFilter.h"
 #include "itkLabelToRGBImageFilter.h"
@@ -14,8 +15,10 @@
 const unsigned int Dimension = 3;
 typedef unsigned char PixelType;
 typedef unsigned long ConnCompType;
+typedef float ParameterPixelType;
 typedef itk::RGBPixel<unsigned char> RGBPixelType;
 typedef itk::Image<RGBPixelType, Dimension> ImageType;
+typedef itk::Image<ParameterPixelType, Dimension> ParameterImageType;
 
 typedef itk::Image<RGBPixelType, Dimension> RGBImageType;
 typedef itk::Function::CustomColormapFunction<ImageType::PixelType, RGBImageType::PixelType> ColormapType;
@@ -65,84 +68,65 @@ int main(int argc, char* argv[]) {
 
 	LabelMapType *labelMap = i2l->GetOutput();
   // Retrieve all attributes
-	std::ofstream outfile ("cell_attributes.txt");
+	std::ofstream outfile ("cell_attributes.csv");
+	std::vector<ParameterPixelType> parameterTable;
+	parameterTable.resize(labelMap->GetNumberOfLabelObjects());
   for (unsigned int n = 0; n < labelMap->GetNumberOfLabelObjects(); ++n)
     {
     ShapeLabelObjectType *labelObject = labelMap->GetNthLabelObject(n);
-    outfile << "Label: "
-              << itk::NumericTraits<LabelMapType::LabelType>::PrintType(labelObject->GetLabel()) << std::endl;
-    outfile << "    BoundingBox: "
-              << labelObject->GetBoundingBox() << std::endl;
-    outfile << "    NumberOfPixels: "
-              << labelObject->GetNumberOfPixels() << std::endl;
-    outfile << "    PhysicalSize: "
-              << labelObject->GetPhysicalSize() << std::endl;
-    outfile << "    Centroid: "
-              << labelObject->GetCentroid() << std::endl;
-    outfile << "    NumberOfPixelsOnBorder: "
-              << labelObject->GetNumberOfPixelsOnBorder() << std::endl;
-    outfile << "    PerimeterOnBorder: "
-              << labelObject->GetPerimeterOnBorder() << std::endl;
-    outfile << "    FeretDiameter: "
-              << labelObject->GetFeretDiameter() << std::endl;
-    outfile << "    PrincipalMoments: "
-              << labelObject->GetPrincipalMoments() << std::endl;
-    outfile << "    PrincipalAxes: "
-              << labelObject->GetPrincipalAxes() << std::endl;
-    outfile << "    Elongation: "
-              << labelObject->GetElongation() << std::endl;
-    outfile << "    Perimeter: "
-              << labelObject->GetPerimeter() << std::endl;
-    outfile << "    Roundness: "
-              << labelObject->GetRoundness() << std::endl;
-    outfile << "    EquivalentSphericalRadius: "
-              << labelObject->GetEquivalentSphericalRadius() << std::endl;
-    outfile << "    EquivalentSphericalPerimeter: "
-              << labelObject->GetEquivalentSphericalPerimeter() << std::endl;
-    outfile << "    EquivalentEllipsoidDiameter: "
-              << labelObject->GetEquivalentEllipsoidDiameter() << std::endl;
-    outfile << "    Flatness: "
-              << labelObject->GetFlatness() << std::endl;
-    outfile << "    PerimeterOnBorderRatio: "
-              << labelObject->GetPerimeterOnBorderRatio() << std::endl;
+    outfile << itk::NumericTraits<LabelMapType::LabelType>::PrintType(labelObject->GetLabel()) << ",";
+    outfile << labelObject->GetNumberOfPixels() << ",";
+    outfile << labelObject->GetPhysicalSize() << ",";
+    outfile << labelObject->GetCentroid()[0] << ",";
+    outfile << labelObject->GetCentroid()[1] << ",";
+    outfile << labelObject->GetCentroid()[2] << ",";
+    outfile << labelObject->GetPrincipalMoments()[0] << ",";
+    outfile << labelObject->GetPrincipalMoments()[1] << ",";
+    outfile << labelObject->GetPrincipalMoments()[2] << ",";
+    outfile << labelObject->GetPrincipalAxes()[0][0] << ",";
+    outfile << labelObject->GetPrincipalAxes()[0][1] << ",";
+    outfile << labelObject->GetPrincipalAxes()[0][2] << ",";
+    outfile << labelObject->GetPrincipalAxes()[1][0] << ",";
+    outfile << labelObject->GetPrincipalAxes()[1][1] << ",";
+    outfile << labelObject->GetPrincipalAxes()[1][2] << ",";
+    outfile << labelObject->GetPrincipalAxes()[2][0] << ",";
+    outfile << labelObject->GetPrincipalAxes()[2][1] << ",";
+    outfile << labelObject->GetPrincipalAxes()[2][2] << ",";
+    outfile << labelObject->GetElongation() << ",";
+    outfile << labelObject->GetRoundness() << ",";
+	parameterTable[n] = labelObject->GetPhysicalSize();
     }
 
-	int no_cells = connected->GetObjectCount();
-	GeneratorType::Pointer generator = GeneratorType::New();
-	generator->Initialize();
-	
-	int R_color[no_cells - 1];
-	int G_color[no_cells - 1];
-	int B_color[no_cells - 1];
-	for(int i = 0; i < (int)no_cells; i++) {
-		R_color[i] = (int)generator->GetUniformVariate(0,255);
-		G_color[i] = (int)generator->GetUniformVariate(0,255);
-		B_color[i] = (int)generator->GetUniformVariate(0,255);
-	}
+	CCImageType::RegionType inputRegion = connected->GetOutput()->GetRequestedRegion();
+	ParameterImageType::Pointer parameterImage = ParameterImageType::New();
+	parameterImage->SetRegions(inputRegion);
+
+	parameterImage->SetSpacing(connected->GetOutput()->GetSpacing());
+	parameterImage->SetOrigin(connected->GetOutput()->GetOrigin());
+	parameterImage->Allocate();
+
+  typedef itk::ImageRegionConstIterator< CCImageType > ConstIteratorType ;
+  typedef itk::ImageRegionIterator< ParameterImageType > IteratorType; 
+
+	ConstIteratorType inputIt(   connected->GetOutput(), inputRegion  );
+	IteratorType      outputIt(  parameterImage,         inputRegion );
+	inputIt.GoToBegin();
+	outputIt.GoToBegin();
+	while( !inputIt.IsAtEnd() )
+		{
+		outputIt.Set( parameterTable[ inputIt.Get()]  );
+		++inputIt;
+		++outputIt;
+		}
 
 
-	typedef itk::LabelToRGBImageFilter<CCImageType, RGBImageType> RGBFilterType;
-	RGBFilterType::Pointer rgbFilter = RGBFilterType::New();
-	rgbFilter->SetInput( connected->GetOutput());
-	
-	for(int i = 0; i < (int)no_cells; i++) {
-		rgbFilter->AddColor(R_color[i], G_color[i], B_color[i]);
-	}
-
-	std::cout << "Number of colors: " << rgbFilter->GetNumberOfColors() << std::endl;
-
-	/*typedef itk::ImageFileWriter<RGBImageType> WriterType;
-	WriterType::Pointer writer = WriterType::New();
-	writer->SetFileName(argv[2]);
-	writer->SetInput(rgbFilter->GetOutput());
-	writer->Update();*/
-
-	typedef itk::ImageFileWriter<RGBImageType> WriterType;
+	typedef itk::ImageFileWriter<ParameterImageType> WriterType;
         WriterType::Pointer writer2 = WriterType::New();
         writer2->SetFileName(argv[2]);
-        writer2->SetInput(rgbFilter->GetOutput());
+        writer2->SetInput(parameterImage);
         writer2->Update();
 	
+
 	duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
 
     	std::cout<<"printf: "<< duration <<'\n';
